@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>D3: Vehicle Population Pie Chart</title>
+    <script type="text/javascript" src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <label for="fuelTypeGroupSelect">Select Fuel Type Group:</label>
+    <select id="fuelTypeGroupSelect"></select>
+
+    <div id="tooltip" style="position: absolute; opacity: 0;"></div>
+
+    <script type="text/javascript">
+
+        // Load dataset from CSV file
+        d3.csv("Vehicle_Population.csv").then(function(dataset) {
+
+            // Extract fuel type groups for dropdown
+            var fuelTypeGroups = Array.from(new Set(dataset.map(function(d) { return d["Dashboard Fuel Type Group"]; })));
+
+            // Populate fuel type group dropdown
+            d3.select("#fuelTypeGroupSelect")
+                .selectAll("option")
+                .data(fuelTypeGroups)
+                .enter()
+                .append("option")
+                .text(function(d) { return d; })
+                .attr("value", function(d) { return d; });
+
+            // Create an SVG element
+            var svg = d3.select("body").append("svg")
+                .attr("width", 800)
+                .attr("height", 500)
+                .append("g")
+                .attr("transform", "translate(400,250)");
+
+            // Create color scale for different makes
+            var colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+            // Add listener for dropdown change
+            d3.select("#fuelTypeGroupSelect")
+                .on("change", function() {
+                    var selectedFuelTypeGroup = this.value;
+                    updateChart(selectedFuelTypeGroup);
+                });
+
+            // Initial rendering of pie chart
+            updateChart(fuelTypeGroups[0]); // Use the first fuel type group initially
+
+            // Function to update the pie chart based on selected fuel type group
+            function updateChart(fuelTypeGroup) {
+                // Filter data based on selected fuel type group
+                var filteredData = dataset.filter(function(d) {
+                    return d["Dashboard Fuel Type Group"] === fuelTypeGroup;
+                });
+
+                // Group data by make and calculate the sum of vehicles for each make
+                var makeData = d3.group(filteredData, function(d) { return d.Make; });
+                var makeSumData = Array.from(makeData, ([make, makeGroup]) => ({
+                    make: make,
+                    sum: d3.sum(makeGroup, function(d) { return +d["Number of Vehicles"]; })
+                }));
+
+                // Create a pie chart layout
+                var pie = d3.pie().value(function(d) { return d.sum; });
+
+                // Generate pie chart data
+                var pieData = pie(makeSumData);
+
+                // Create an arc generator
+                var arc = d3.arc()
+                    .innerRadius(0)
+                    .outerRadius(200);
+
+                // Remove existing chart elements
+                svg.selectAll("*").remove();
+
+                // Append arcs for each slice in the pie chart
+                var arcs = svg.selectAll("path")
+                    .data(pieData)
+                    .enter()
+                    .append("path")
+                    .attr("d", arc)
+                    .attr("fill", function(d, i) { return colorScale(i); })
+                    .on("mouseover", function(event, d) {
+                        showTooltip(event, d.data.make, d.data.sum);
+                    })
+                    .on("mouseout", function(event, d) {
+                        hideTooltip();
+                    });
+
+                // Function to show tooltip
+                function showTooltip(event, make, sum) {
+                    var tooltip = d3.select("#tooltip");
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+
+                    var tooltipContent = "<strong>Make:</strong> " + make + "<br>";
+                    tooltipContent += "<strong>Number of Vehicles:</strong> " + sum;
+
+                    tooltip.html(tooltipContent)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                }
+
+                // Function to hide tooltip
+                function hideTooltip() {
+                    var tooltip = d3.select("#tooltip");
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0);
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>

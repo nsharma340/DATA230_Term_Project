@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>D3: Bubble Chart - Number of Vehicles by Make and Fuel Type</title>
+    <script type="text/javascript" src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div>
+        <h1>Bubble Chart: Number of Vehicles by Make and Fuel Type</h1>
+        <label for="countyFilter">Filter by County:</label>
+        <select id="countyFilter"></select>
+    </div>
+    <div id="chartContainer" style="display: flex;">
+        <div id="bubbleChart" style="flex: 1;"></div>
+        <div id="legend" style="flex: 0 0 200px; padding-left: 20px;"></div>
+    </div>
+
+    <!-- Tooltip container -->
+    <div id="tooltip" style="position: absolute; opacity: 0;"></div>
+
+    <script type="text/javascript">
+
+        // Load dataset from CSV file
+        d3.csv("Vehicle_Population.csv").then(function(dataset) {
+
+            // Filter out rows with missing data
+            dataset = dataset.filter(function(d) {
+                return d.Make && d["Fuel Type"] && d["Number of Vehicles"] && d.County;
+            });
+
+            // Create an array of objects with Make, Fuel Type, and Number of Vehicles
+            var bubbleData = dataset.map(function(d) {
+                return {
+                    make: d.Make,
+                    fuelType: d["Fuel Type"],
+                    vehicles: +d["Number of Vehicles"],
+                    county: d.County
+                };
+            });
+
+            // Group data by make, fuel type, and county, and calculate the total number of vehicles for each group
+            var groupedData = d3.group(bubbleData, function(d) { return d.make + "_" + d.fuelType + "_" + d.county; });
+            var bubbleChartData = Array.from(groupedData, ([group, groupData]) => {
+                var [make, fuelType, county] = group.split("_");
+                return {
+                    make: make,
+                    fuelType: fuelType,
+                    county: county,
+                    totalVehicles: d3.sum(groupData, function(d) { return d.vehicles; })
+                };
+            });
+
+            // Set up the SVG dimensions
+            var svgWidth = 600;
+            var svgHeight = 500;
+
+            // Create an SVG element
+            var svg = d3.select("#bubbleChart").append("svg")
+                .attr("width", svgWidth)
+                .attr("height", svgHeight);
+
+            // Create scales for circle size and color
+            var radiusScale = d3.scaleSqrt()
+                .domain([0, d3.max(bubbleChartData, function(d) { return d.totalVehicles; })])
+                .range([5, 30]);
+
+            var colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+            // Create a dropdown for county filter
+            var countyFilter = d3.select("#countyFilter");
+
+            // Populate the county filter dropdown
+            var counties = Array.from(new Set(bubbleData.map(function(d) { return d.county; })));
+            countyFilter.selectAll("option")
+                .data(counties)
+                .enter().append("option")
+                .attr("value", function(d) { return d; })
+                .text(function(d) { return d; });
+
+            // Add listener for dropdown change
+            countyFilter.on("change", updateChart);
+
+            // Function to update the chart based on selected county
+            function updateChart() {
+                var selectedCounty = countyFilter.property("value");
+
+                // Filter data based on selected county
+                var filteredData = bubbleChartData.filter(function(d) {
+                    return d.county === selectedCounty;
+                });
+
+                // Remove existing circles
+                svg.selectAll("circle").remove();
+
+                // Add circles to the chart for the selected county
+                svg.selectAll("circle")
+                    .data(filteredData)
+                    .enter()
+                    .append("circle")
+                    .attr("cx", function(d) { return Math.random() * (svgWidth - 50); }) // Random x position
+                    .attr("cy", function(d) { return Math.random() * (svgHeight - 50); }) // Random y position
+                    .attr("r", function(d) { return radiusScale(d.totalVehicles); })
+                    .attr("fill", function(d) { return colorScale(d.make); })
+                    .attr("opacity", 0.7)
+                    .on("mouseover", function(event, d) {
+                        showTooltip(event, "Make: " + d.make + "<br>Fuel Type: " + d.fuelType + "<br>County: " + d.county + "<br>Total Vehicles: " + d.totalVehicles);
+                    })
+                    .on("mouseout", function() {
+                        hideTooltip();
+                    });
+
+                // Update legend
+                updateLegend(filteredData);
+            }
+
+            // Function to show tooltip
+            function showTooltip(event, content) {
+                var tooltip = d3.select("#tooltip");
+                tooltip.transition()
+                    .duration(200)
+                    .style("opacity", .9);
+
+                tooltip.html(content)
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY - 28) + "px");
+            }
+
+            // Function to hide tooltip
+            function hideTooltip() {
+                var tooltip = d3.select("#tooltip");
+                tooltip.transition()
+                    .duration(200)
+                    .style("opacity", 0);
+            }
+
+            // Function to update the legend
+            function updateLegend(data) {
+                // Remove existing legend
+                d3.select("#legend").selectAll("*").remove();
+
+                // Create a legend based on unique makes in the filtered data
+                var uniqueMakes = Array.from(new Set(data.map(function(d) { return d.make; })));
+                var legend = d3.select("#legend")
+                    .append("svg")
+                    .attr("width", 200)
+                    .attr("height", uniqueMakes.length * 20 + 20)
+                    .append("g")
+                    .attr("transform", "translate(10,10)");
+
+                // Add color squares and make labels to the legend
+                legend.selectAll("rect")
+                    .data(uniqueMakes)
+                    .enter()
+                    .append("rect")
+                    .attr("x", 0)
+                    .attr("y", function(d, i) { return i * 20; })
+                    .attr("width", 15)
+                    .attr("height", 15)
+                    .attr("fill", function(d) { return colorScale(d); });
+
+                legend
+                legend.selectAll("text")
+                    .data(uniqueMakes)
+                    .enter()
+                    .append("text")
+                    .attr("x", 20)
+                    .attr("y", function(d, i) { return i * 20 + 12; })
+                    .text(function(d) { return d; })
+                    .style("font-size", "12px")
+                    .style("fill", "#555");
+            }
+
+            // Initial chart rendering
+            updateChart();
+
+        });
+
+    </script>
+</body>
+</html>
